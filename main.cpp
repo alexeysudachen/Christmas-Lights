@@ -15,36 +15,36 @@ constexpr mcu::gpio<12> button{};
 int main()
 {
   mcu::setup_gpio(led);
-	mcu::setup_gpio(button,mcu::pull_up,mcu::input);
-	mcu::setup_pwm(pwm,mcu::negative_polarity,3*_hz_,50*_dty_);
-	mcu::setup_alarm(alarm,30*_ms_);
+  mcu::setup_gpio(button,mcu::pull_up,mcu::input);
+  mcu::setup_pwm(pwm,mcu::negative_polarity,3*_hz_,50*_dty_);
+  mcu::setup_alarm(alarm,30*_ms_);
 
-	mcu::turn_on(led);
-	mcu::start(alarm);
+  mcu::turn_on(led);
+  mcu::start(alarm);
 
-	bool foo = true;
-	
-	for(;;)
-	{
-		auto wtf = mcu::wait_for_next(pwm,alarm);
-		if ( wtf == pwm )
-		{
-			mcu::put(led,mcu::is_on_duty(pwm));
-		}
-		else if ( wtf == alarm )
-		{
-			if ( mcu::get(button) == mcu::low && !foo ) 
-			{
-				mcu::stop(pwm);
-				foo = true;
-			}
-			else if ( mcu::get(button) == mcu::high && foo )
-			{
-				mcu::start(pwm);
-				foo = false;
-			}
-		}
-	}
+  bool foo = true;
+  
+  for(;;)
+  {
+    auto wtf = mcu::wait_for_next(pwm,alarm);
+    if ( wtf == pwm )
+    {
+      mcu::put(led,mcu::is_on_duty(pwm));
+    }
+    else if ( wtf == alarm )
+    {
+      if ( mcu::get(button) == mcu::low && !foo ) 
+      {
+        mcu::stop(pwm);
+        foo = true;
+      }
+      else if ( mcu::get(button) == mcu::high && foo )
+      {
+        mcu::start(pwm);
+        foo = false;
+      }
+    }
+  }
 
 }
 
