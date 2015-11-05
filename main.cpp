@@ -3,44 +3,51 @@
 #define STM32F030
 #endif
 
-#include "cortex_m0.hxx"
+#include "cortex_m0/stm32f030f4.hxx"
+#include "cortex_m0/gpio.hxx"
+#include "cortex_m0/timer.hxx"
+#include "cortex_m0/feature.hxx"
+#include "cortex_m0/event.hxx"
 
-using mcu = cortex_m0::stm32f030f4;
+using mcu = stm32f030f4;
 
-constexpr mcu::timer<14,10> pwm{};
-constexpr mcu::timer<3> alarm{};
-constexpr mcu::gpio<11> led{};
-constexpr mcu::gpio<12> button{};
-
+constexpr gpio::ctl<mcu::leg<11>> led {};
+constexpr gpio::ctl<mcu::leg<12>> button {};
+constexpr timer::ctl<mcu::timer<14>,mcu::leg<10>> pwm {};
+constexpr timer::ctl<mcu::timer<3>> alarm {};
+  
 int main()
 {
-  mcu::setup_gpio(led);
-  mcu::setup_gpio(button,mcu::pull_up,mcu::input);
-  mcu::setup_pwm(pwm,mcu::negative_polarity,3*_hz_,50*_dty_);
-  mcu::setup_alarm(alarm,30*_ms_);
-
-  mcu::turn_on(led);
-  mcu::start(alarm);
+  
+  led.setup();
+  button.setup(gpio::pull_up,gpio::input);
+  pwm.setup(timer::pwm1,timer::negative_polarity,3*_hz_,50*_dty_,gpio::open_drain);
+  alarm.setup(30*_ms_);
+  
+  led.set_high();
+  alarm.start();
 
   bool foo = true;
   
   for(;;)
   {
-    auto wtf = mcu::wait_for_next(pwm,alarm);
-    if ( wtf == pwm )
+    auto wtf = event::wait_for(pwm.rise,pwm.fall,alarm.rise);
+    
+    if ( wtf == pwm.rise )
+        led.set_high();
+    else if ( wtf == pwm.fall )
+        led.set_low();
+    
+    if ( wtf == alarm.rise )
     {
-      mcu::put(led,mcu::is_on_duty(pwm));
-    }
-    else if ( wtf == alarm )
-    {
-      if ( mcu::get(button) == mcu::low && !foo ) 
+      if ( button.get() == button.low && !foo ) 
       {
-        mcu::stop(pwm);
+        pwm.stop();
         foo = true;
       }
-      else if ( mcu::get(button) == mcu::high && foo )
+      else if ( button.get() == button.high && foo )
       {
-        mcu::start(pwm);
+        pwm.start();
         foo = false;
       }
     }
