@@ -25,13 +25,13 @@ namespace gpio
   struct ctl
   {
     template<typename... Opts> 
-    static void _setup()
+    __declspec(noinline) static void _setup()
     {
       using opts_list = mp::list<Opts...>;
       using leg_info = typename leg::info;
       constexpr auto leg_ctl = _gpio_ctl<leg_info::gpio_port>();
       
-      static_assert(mp::in<output_t,opts_list>::value + mp::in<input_t,opts_list>::value < 2,"please specify only output for read/write leg_ctl");
+      static_assert(mp::in<output_t,opts_list>::count_once + mp::in<input_t,opts_list>::count_once < 2,"please specify only output for read/write leg_ctl");
       constexpr bool read_only = !mp::in<output_t,opts_list>::exists && mp::in<input_t,opts_list>::exists;
       
       RCC->AHBENR |= _gpio_ahbenr<leg_info::gpio_port>();
@@ -56,35 +56,41 @@ namespace gpio
         leg_ctl->PUPDR &= uint32_t(2)<<leg_info::gpio_channel*2 | leg_ctl->PUPDR&~(uint32_t(3)<<leg_info::gpio_channel*2);
       
       if ( read_only )
-        leg_ctl->MODER |= uint32_t(1)<<leg_info::gpio_channel*2;
-      else
         leg_ctl->MODER &= ~(uint32_t(3)<<leg_info::gpio_channel*2);
+      else
+        leg_ctl->MODER = leg_ctl->MODER & ~(uint32_t(3)<<leg_info::gpio_channel*2) | uint32_t(1)<<leg_info::gpio_channel*2;
     }
 
     template<typename... Opts> 
     __forceinline void setup(Opts... opts) const { _setup<Opts...>(); }
     
-    void set_high() const
+    __declspec(noinline) static void _set_high()
     {
       using info = typename leg::info;
       constexpr auto ctl = _gpio_ctl<info::gpio_port>();
       ctl->ODR |= (uint16_t(1)<<info::gpio_channel); 
     }
     
-    void set_low() const
+    __forceinline void set_high() const { _set_high(); }
+    
+    __declspec(noinline) static void _set_low()
     {
       using info = typename leg::info;
       constexpr auto ctl = _gpio_ctl<info::gpio_port>();
       ctl->ODR &= ~(uint16_t(1)<<info::gpio_channel); 
     }
 
-    bool get() const
+    __forceinline void set_low() const { _set_low(); }
+
+    __declspec(noinline) static bool _get()
     {
       using info = typename leg::info;
       constexpr auto ctl = _gpio_ctl<info::gpio_port>();
       return (ctl->IDR&(1<<info::gpio_channel) == 0)?false:true;;
     }
     
+    __forceinline bool get() const { return _get(); }
+
     static constexpr bool high = true;
     static constexpr bool low  = false;
   };

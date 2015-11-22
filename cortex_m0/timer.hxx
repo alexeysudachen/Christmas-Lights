@@ -12,6 +12,7 @@ namespace timer
   using namespace gpio::share;
   
   enum negative_polarity_t { negative_polarity };
+  enum positive_polarity_t { positive_polarity };
   enum pwm1_t { pwm, pwm1 };
   enum pwm2_t { pwm2 };
   enum counter_t { counter };
@@ -19,9 +20,9 @@ namespace timer
    
   namespace {
     template<int no> // share body in header
-    uint16_t split_ticks(uint32_t& ticks) __attribute__((noinline))
+    __declspec(noinline) uint16_t split_ticks(uint32_t& ticks)
     {
-      uint16_t ps = 1;
+      uint32_t ps = 1;
       do
         for ( int i = 0; i < feature::prime::PRIMES_8bit_COUNT && ticks > 0x0ffff; )
         {
@@ -30,12 +31,12 @@ namespace timer
           if ( r.rem != 0 ) ++i;
           else
           {
-            ps*=r.quot;
+            ps = ps*p;
             ticks = r.quot;
           }
         }
       while ( ticks > 0x0ffff && --ticks );
-      return ps;
+      return (uint16_t)ps;
     }
   }
   
@@ -54,6 +55,8 @@ namespace timer
         constexpr auto leg_ctl = _gpio_ctl<leg_info::gpio_port>();
 
         RCC->AHBENR |= _gpio_ahbenr<leg_info::gpio_port>();
+        leg_ctl->MODER = leg_ctl->MODER & ~(uint32_t(3)<<leg_info::gpio_channel*2)
+                            | (uint32_t(2)<<leg_info::gpio_channel*2); // alternate function
 
         if ( mp::in<open_drain_t,opts_list>::exists ) 
           leg_ctl->OTYPER |= 1<<leg_info::gpio_channel;
@@ -61,24 +64,22 @@ namespace timer
           leg_ctl->OTYPER &= ~(1<<leg_info::gpio_channel);
         
         leg_ctl->OSPEEDR |= uint32_t(3)<<leg_info::gpio_channel*2; // high speed
-        leg_ctl->MODER &= ~(uint32_t(2)<<leg_info::gpio_channel*2); // alternate function
         
         constexpr int leg_af = for_af<typename leg_info::af,af_tim,tim_info::no>::find();
         static_assert(leg_af >= 0,"specified leg des not connected to timer");
         
         constexpr int af_r = leg_info::gpio_channel < 8 ? 0 : 1;
         constexpr int af_shift = (leg_info::gpio_channel%8)*4;
-        leg_ctl->AFR[af_r] = leg_ctl->AFR[af_r] & ~(uint32_t(0xf)<<af_shift) | uint32_t(leg_af)<<af_shift;        
+        leg_ctl->AFR[af_r] = leg_ctl->AFR[af_r] & ~(uint32_t(0xf)<<af_shift) | (uint32_t(leg_af)<<af_shift);        
       }
     };
-    
+     
     struct enable_channel{};
+    struct disable_channel{};
     
-    template<typename Leg>
-    struct ChannelOperator
+    template<int channel>
+    struct ChannelOperator1
     {
-      using leg_info = typename Leg::info;
-      static constexpr int channel = mp::find<typename leg_info::index,typename tim_info::mapping>::value::channel;
       static constexpr int abs_channel = channel < 0 ? -channel : channel;
       static constexpr int shift = abs_channel&1 ? 0 : 8;
       
@@ -96,19 +97,22 @@ namespace timer
         CCMR = (CCMR & ~mask)|val;
       }
       
-      static constexpr uint16_t polarity_bit() { return channel > 0 ? 1<<((channel-1)*4+0) : 1<<((abs_channel-1)*4+2); }
+      static constexpr uint16_t polarity_bit() { return channel > 0 ? 1<<((channel-1)*4+1) : 1<<((abs_channel-1)*4+3); }
       static constexpr uint16_t enable_bit() { return channel > 0 ? 1<<((channel-1)*4+0) : 1<<((abs_channel-1)*4+2); }
       
       __forceinline static void apply(pwm1_t) { set_mode(6,true); }
       __forceinline static void apply(pwm2_t) { set_mode(7,true); }
       __forceinline static void apply(pulse_t){ set_mode(3,true); }
       __forceinline static void apply(negative_polarity_t) { _tim_ctl<tim_info::no>()->CCER |= polarity_bit(); }
+      __forceinline static void apply(positive_polarity_t) { _tim_ctl<tim_info::no>()->CCER &= ~polarity_bit(); }
       __forceinline static void apply(enable_channel) { _tim_ctl<tim_info::no>()->CCER |= enable_bit(); }
-      
-      
-      __forceinline static void apply(feature::duty, uint16_t compare)
+      __forceinline static void apply(disable_channel) { _tim_ctl<tim_info::no>()->CCER &= ~enable_bit(); }
+           
+      __forceinline static void apply(feature::duty dty)
       { 
         constexpr auto tim_ctl = _tim_ctl<tim_info::no>();
+        uint16_t counter = tim_ctl->ARR;
+        uint16_t compare = uint16_t(uint32_t(counter)*dty.value/100);
         static_assert(abs_channel<5 && abs_channel>0, "impossible channel index");
         switch(abs_channel)
         {
@@ -120,6 +124,9 @@ namespace timer
       }
     };
     
+    template<typename Leg>
+    using ChannelOperator = ChannelOperator1<mp::find<typename Leg::info::index,typename tim_info::mapping>::value::channel>;
+
     struct OptSetupOperator
     {
       template<typename T> __forceinline static 
@@ -161,18 +168,10 @@ namespace timer
     static void set_counter_ticks(uint32_t ticks)
     {
       constexpr auto tim_ctl = _tim_ctl<tim_info::no>();
-      tim_ctl->PSC = split_ticks<0>(ticks);
+      tim_ctl->PSC = split_ticks<0>(ticks)-1;
       tim_ctl->ARR = (uint16_t)ticks;
     }
-    
-    static void set_duty_cycles(uint32_t dty)
-    {
-      constexpr auto tim_ctl = _tim_ctl<tim_info::no>();
-      uint16_t counter = tim_ctl->ARR;
-      uint16_t compare = uint16_t(uint32_t(counter)*dty/100);
-      mp::for_each<legs_list,ChannelOperator>::apply(feature::duty(),compare);
-    }
-    
+        
     template<typename... Opts>
     __declspec(noinline) void setup(Opts... opts) const
     {
@@ -188,7 +187,6 @@ namespace timer
         RCC->APB2ENR |= tim_info::ahbenr;
       
       constexpr auto tim_ctl = _tim_ctl<tim_info::no>();
-      // disable all channels
       
       // ARR is not buffered, counter is edge-aligned, counter will not stop, 
       //   upcounting, any update source, UEV event is enabled, counter is disabled.
@@ -212,9 +210,15 @@ namespace timer
         {
           OptSetupOperator::apply(pwm1);
         }
-        uint32_t dty = mp::arg_fetch<feature::duty>::value(opts...).value;
-        set_duty_cycles(dty);
+        feature::duty dty = mp::arg_fetch<feature::duty>::value(opts...);
+        mp::for_each<legs_list,ChannelOperator>::apply(dty);
       }
+      
+      if ( tim_info::no == 1 )
+      {
+        tim_ctl->BDTR = uint16_t(1) << 14; // AOE
+      }
+      mp::for_each<legs_list,ChannelOperator>::apply(enable_channel());
     }
     
     __declspec(noinline) void start() const
@@ -223,7 +227,6 @@ namespace timer
       tim_ctl->DIER&= ~TIM_DIER_UIE; // disable update interrupt
       tim_ctl->EGR |= TIM_EGR_UG;    // update counter
       tim_ctl->SR   =0;              // clear status flags
-      mp::for_each<legs_list,ChannelOperator>::apply(enable_channel());
       tim_ctl->DIER|= TIM_DIER_UIE;  // enable update interrupt
       tim_ctl->CR1 |= TIM_CR1_CEN;   // start counter
     }
@@ -255,9 +258,51 @@ namespace timer
     // will updated yet only on next cycle.
     void update_duty(feature::duty dty) const
     {
-      set_duty_cycles(dty.value);
+      mp::for_each<legs_list,ChannelOperator>::apply(dty);
     }
- 
+   
+    template<typename Channel, typename Leg>
+    struct is_binded_to_channel
+    {
+      static constexpr int channel = mp::find<typename Leg::info::index,typename tim_info::mapping>::value::channel;
+      static constexpr bool is_true = (int)Channel::value == channel || (int)Channel::value == -channel;
+    };
+      
+    template<typename Channel>
+    struct is_binded_to_channel<Channel,mp::E>
+    {
+      static constexpr bool is_true = false;
+    };
+            
+    template<int channel_no> using in_binded_legs = mp::list_find_p<mp::number<channel_no>,is_binded_to_channel,legs_list>;     
+
+    template<int channel_no, typename... Opts> __declspec(noinline)
+    typename mp::enable_if<in_binded_legs<channel_no>::exists == true,void>::type 
+    /*void*/ update_channel(Opts... opts) const
+    {
+      using Leg = typename in_binded_legs<channel_no>::value;
+      mp::for_each_arg< ChannelOperator<Leg> >::apply(opts...); 
+    }
+    
+    template<int channel_no, typename... Opts> __declspec(noinline)
+      typename mp::enable_if<
+        in_binded_legs<channel_no>::exists == false 
+        && channel_no >= 1 
+        && channel_no <= tim_info::channels_count,
+        void>::type 
+    /*void*/ update_free_channel(Opts... opts) const
+    {
+      using Leg = typename in_binded_legs<channel_no>::value;
+      mp::for_each_arg< ChannelOperator1<channel_no> >::apply(opts...); 
+    }
+
+    template<typename Leg, typename... Opts> __declspec(noinline)
+    typename mp::enable_if<mp::in<Leg,legs_list>::exists,void>::type 
+    /*void*/ update_leg(Opts... opts) const
+    {
+      mp::for_each_arg< ChannelOperator<Leg> >::apply(opts...); 
+    }
+
     enum { 
       REASON_COMPARE  = 0, // PWM is low, CNT matches the CCRx (any)
       REASON_COMPARE1 = 1, // PWM is low, CNT matches the CCR1 

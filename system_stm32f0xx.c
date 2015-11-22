@@ -116,8 +116,8 @@ void SystemInit (void)
   /* Reset PREDIV1[3:0] bits */
   RCC->CFGR2 &= (uint32_t)0xFFFFFFF0;
 
-  /* Reset USARTSW[1:0], I2CSW, CECSW and ADCSW bits */
-  RCC->CFGR3 &= (uint32_t)0xFFFFFEAC;
+  /* Reset USART1SW[1:0], I2C1SW and ADCSW bits */
+  RCC->CFGR3 &= (uint32_t)0xFFFFFEEC;
 
   /* Reset HSI14 bit */
   RCC->CR2 &= (uint32_t)0xFFFFFFFE;

@@ -150,7 +150,7 @@ namespace mp
   struct in
   {
     static constexpr bool exists = recursive_compare<the_same<What,typename List::head>::is_true,the_same,What,typename List::head,typename List::tail>::exists;
-    static constexpr int value = exists?1:0;
+    static constexpr int count_once = exists?1:0;
     static constexpr int order = recursive_compare<the_same<What,typename List::head>::is_true,the_same,What,typename List::head,typename List::tail>::order;
   };
   

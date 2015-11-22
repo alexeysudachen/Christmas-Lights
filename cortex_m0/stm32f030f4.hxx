@@ -30,6 +30,22 @@ namespace cortex_m0
       tim_def<17,2, RCC_APB2ENR_TIM17EN,1, mp::list<maps_to<13,1>> >
     > timers;
 
+    using PA0 = leg<6>;
+    using PA1 = leg<7>;
+    using PA2 = leg<8>;
+    using PA3 = leg<9>;
+    using PA4 = leg<10>;
+    using PA5 = leg<11>;
+    using PA6 = leg<12>;
+    using PA7 = leg<13>;
+    using PA9 = leg<17>;
+    using PA10= leg<18>;
+    using PA13= leg<19>;
+    using PA14= leg<20>;
+    using PB1 = leg<14>;
+    using PF0 = leg<2>;
+    using PF1 = leg<3>;
+    
     typedef mp::list<
       leg_def<2, 'F',0 >,
       leg_def<3, 'F',1 >,

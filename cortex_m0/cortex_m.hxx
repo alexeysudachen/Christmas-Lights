@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <new>
 #include "metacpp.hxx"
 
 namespace cortex_m0
@@ -113,6 +115,7 @@ namespace cortex_m0
       static_assert(mp::find_number<timer_number,typename mCu::timers>::exists,"specified timer does not exist on the device");
     };
     using hardware = mCu;
+
   };
 
 }
