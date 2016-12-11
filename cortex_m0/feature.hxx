@@ -68,6 +68,19 @@ namespace feature
     return timeout(value*1000*1000);
   }
 
+  struct cputick
+  {
+    struct _Tik {};
+    uint32_t counter;
+    explicit cputick(uint32_t val) : counter(val) {}
+    cputick() : counter(0) {}
+  };
+
+  inline cputick operator*(uint32_t value,cputick::_Tik)
+  {
+    return cputick(value);
+  }
+  
   struct prime
   {
     static constexpr int PRIMES_8bit_COUNT = 54;
@@ -95,4 +108,5 @@ static constexpr feature::frequency::_mHz  _mhz_{};
 static constexpr feature::timeout::_Mks    _mks_{};
 static constexpr feature::timeout::_Ms     _ms_{};
 static constexpr feature::timeout::_Sec    _sec_{};
+static constexpr feature::cputick::_Tik    _tik_{};
 	

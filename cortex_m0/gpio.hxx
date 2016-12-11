@@ -44,16 +44,16 @@ namespace gpio
       if ( !mp::in<medium_speed_t,opts_list>::exists&&!mp::in<low_speed_t,opts_list>::exists )
         leg_ctl->OSPEEDR |= uint32_t(3)<<leg_info::gpio_channel*2;
       else if ( mp::in<medium_speed_t,opts_list>::exists )
-        leg_ctl->OSPEEDR = uint32_t(1)<<leg_info::gpio_channel*2 | leg_ctl->OSPEEDR&~(uint32_t(3)<<leg_info::gpio_channel*2);
+        leg_ctl->OSPEEDR = (uint32_t(1)<<leg_info::gpio_channel*2) | leg_ctl->OSPEEDR&~(uint32_t(3)<<leg_info::gpio_channel*2);
       else
         leg_ctl->OSPEEDR &= ~(uint32_t(3)<<leg_info::gpio_channel*2);
-      
+            
       if ( !mp::in<pull_up_t,opts_list>::exists&&!mp::in<pull_down_t,opts_list>::exists )
         leg_ctl->PUPDR &= ~(uint32_t(3)<<leg_info::gpio_channel*2);
       else if ( mp::in<pull_up_t,opts_list>::exists ) 
-        leg_ctl->PUPDR &= uint32_t(1)<<leg_info::gpio_channel*2 | leg_ctl->PUPDR&~(uint32_t(3)<<leg_info::gpio_channel*2);
+        leg_ctl->PUPDR = (uint32_t(1)<<leg_info::gpio_channel*2) | leg_ctl->PUPDR&~(uint32_t(3)<<leg_info::gpio_channel*2);
       else 
-        leg_ctl->PUPDR &= uint32_t(2)<<leg_info::gpio_channel*2 | leg_ctl->PUPDR&~(uint32_t(3)<<leg_info::gpio_channel*2);
+        leg_ctl->PUPDR = (uint32_t(2)<<leg_info::gpio_channel*2) | leg_ctl->PUPDR&~(uint32_t(3)<<leg_info::gpio_channel*2);
       
       if ( read_only )
         leg_ctl->MODER &= ~(uint32_t(3)<<leg_info::gpio_channel*2);
@@ -86,7 +86,8 @@ namespace gpio
     {
       using info = typename leg::info;
       constexpr auto ctl = _gpio_ctl<info::gpio_port>();
-      return (ctl->IDR&(1<<info::gpio_channel) == 0)?false:true;;
+      constexpr auto mask = 1<<info::gpio_channel;
+      return ((ctl->IDR&mask) == 0)?false:true;
     }
     
     __forceinline bool get() const { return _get(); }

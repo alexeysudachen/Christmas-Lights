@@ -10,119 +10,138 @@
 #include "cortex_m0/event.hxx"
 
 using mcu = stm32f030f4;
-using leg_9 = mcu::leg<9>;
-using leg_13 = mcu::leg<13>;
-using leg_14 = mcu::leg<14>;
-using leg_17 = mcu::leg<17>;
+using leg_2 = mcu::leg<2>;
+using leg_6 = mcu::leg<6>;
+using leg_8 = mcu::leg<8>;
+using leg_11 = mcu::leg<11>;
 using timer_1 = mcu::timer<1>;
-using timer_3 = mcu::timer<3>;
 
-constexpr timer::ctl<timer_3,leg_14> pwm_3 {};
-constexpr timer::ctl<timer_1,leg_17,leg_13> pwm_1 {};
-constexpr gpio::ctl<leg_9> led {};
+constexpr timer::ctl<timer_1> pwm {};
+constexpr gpio::ctl<leg_6>    led_1 {};
+constexpr gpio::ctl<leg_8>    led_2 {};
+constexpr gpio::ctl<leg_2>    trigger {};
+constexpr gpio::ctl<leg_11>   environ {};
   
-int main()
+static uint32_t max_dty_width = 0;
+static uint32_t dty_width = 0;
+static uint32_t dty_gap = 0;
+  
+inline int clamp_percent(int percent)
 {
-  led.setup();
-  led.set_high();
+  return percent > 100 ? 100 : percent < 0 ? 0 : percent;
+}
   
-  pwm_3.setup(timer::pwm1,3*_sec_,50*_dty_);
-  pwm_1.setup(timer::pwm1,1*_khz_,10*_dty_);
-  pwm_1.update_leg<leg_13>(timer::negative_polarity,20*_dty_);
-  pwm_1.update_free_channel<4>(80*_dty_);
+void calculate_dty_width_and_start_pwm()
+{
   
-  pwm_1.start();
-  pwm_3.start();
-  for(;;)
+  pwm.setup(timer::pwm1,100*_hz_);
+  uint32_t acc = pwm.get_max_counter();
+  max_dty_width = acc-acc/10;
+  
+  dty_gap = acc/2-acc/10;
+  //pwm.update_free_channel<3>((dty_gap-3*acc/10)*_tik_);
+  pwm.update_free_channel<3>((1+acc/20)*_tik_);
+  max_dty_width-= dty_gap;
+  dty_width = max_dty_width;
+}
+  
+void update_btns(int percent)
+{
+  dty_width = max_dty_width*clamp_percent(percent)/100;
+}
+  
+template<int channel>
+void update_channel_btns(int percent)
+{
+  uint32_t width = dty_width*clamp_percent(percent)/100;
+  pwm.update_free_channel<channel>((dty_gap+max_dty_width-width)*_tik_);
+}
+
+template<int channel>
+int next_random_100()
+{
+  static unsigned store = channel;
+  store = (store * 214013 + 2531011)&0x0ffff;
+  return (100*store) / (32768+1);
+}
+
+template<int channel>
+void update_led()
+{
+  static int counter = 0;
+  static int counter_2 = 0;
+
+  if ( counter + counter_2 == 0 )
   {
-    auto wtf = event::wait_for(pwm_1.rise,pwm_1.cc4if);
-    if ( wtf == pwm_1.rise )
-    {
-      led.set_high();
-    }
-    else if ( wtf == pwm_1.cc4if )
-    {
-      led.set_low();
-    }
+    counter_2 = next_random_100<channel>();
+    if ( counter_2 >= 100 ) counter_2 = 99;
+    if ( counter_2 < 10 ) counter_2 = 10;
+    counter = counter_2;
+  }
+  
+  if ( counter ) 
+  {
+    int foo = 100-counter;
+    int percent = foo*foo*100/10000;
+    update_channel_btns<channel>(percent);
+    --counter;
+  }
+  else
+  {
+    int foo = counter_2;
+    int percent = foo*foo*100/10000;
+    update_channel_btns<channel>(percent);
+    --counter_2;
   }
 }
- 
-#if 0
-  
-constexpr gpio::ctl<mcu::leg<11>> led {};
-constexpr gpio::ctl<mcu::leg<12>> button {};
-constexpr timer::ctl<mcu::timer<14>,mcu::leg<10>> pwm {};
-constexpr timer::ctl<mcu::timer<3>> alarm {};
 
 int main()
 {
-  //mcu::setup<mcu::hse<8000000>,mcu::pll<48000000>>();
+  bool the_night_time = false;
+  bool triggered = true;
   
-  led.setup();
-  button.setup(gpio::pull_up,gpio::input);
-  pwm.setup(timer::pwm1,timer::negative_polarity,3*_hz_,50*_dty_,gpio::open_drain);
-  alarm.setup(30*_ms_);
-
-  led.set_high();
-
-  /*
-  pwm.enable_interrupt([]{
-    auto wtf = event::check_for(pwm.rise,pwm.fall);
-    if ( wtf == pwm.rise )
-        led.set_high();
-    else if ( wtf == pwm.fall )
-        led.set_low();
-  });
-  
-  alarm.enable_interrupt([]{
-    static bool is_pressed = true;
-    if ( button.get() == button.low && !is_pressed ) 
-    {
-      pwm.stop();
-      is_pressed = true;
-    }
-    else if ( button.get() == button.high && is_pressed )
-    {
-      pwm.start();
-      led.set_high();
-      is_pressed = false;
-    }
-  });
-  */
-  
-  alarm.start();
-
-
-  bool foo = true;  
-  int dty = 10;
-  for(;;)
-  {
-    auto wtf = event::wait_for(pwm.rise,pwm.fall,alarm.rise);
-        
-    if ( wtf == pwm.rise )
-        led.set_high();
-    else if ( wtf == pwm.fall )
-        led.set_low();
+  led_1.setup(gpio::open_drain);
+  led_2.setup(gpio::open_drain);
+  trigger.setup(gpio::input);
+  environ.setup(gpio::input,gpio::pull_down);
     
-    if ( wtf == alarm.rise )
+  calculate_dty_width_and_start_pwm();
+  update_channel_btns<1>(10);
+  update_channel_btns<2>(99);
+  
+  led_1.set_high();
+  led_2.set_high();
+
+  for(;;)
+  {
+    if ( trigger.get() != triggered )
     {
-      if ( button.get() == button.low && !foo ) 
-      {
-        pwm.stop();
-        foo = true;
-      }
-      else if ( button.get() == button.high && foo )
-      {
-        dty = (dty + 10)%100;
-        pwm.update_channel<1>(dty*_dty_);
+      triggered = !triggered;
+      
+      if ( !triggered )
+      {        
         pwm.start();
-        led.set_high();
-        foo = false;
+      
+        if ( environ.get() != the_night_time )
+        {
+          the_night_time = !the_night_time;
+          update_btns(the_night_time?20:100);
+        }      
       }
     }
+    else if ( event::check_and_clear(pwm.cc3if) )
+    {
+      led_1.set_low();
+      led_2.set_low();
+      update_led<1>();
+      update_led<2>();
+    }
+    else
+    {
+      if ( event::check_and_clear(pwm.cc1if) )
+        led_1.set_high();
+      if ( event::check_and_clear(pwm.cc2if) )
+        led_2.set_high();
+    }
   }
-
 }
-
-#endif
-

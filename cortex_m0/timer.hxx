@@ -122,6 +122,20 @@ namespace timer
           case 4: tim_ctl->CCR4 = compare; break;
         }
       }
+      
+      __forceinline static void apply(feature::cputick tik)
+      {
+        constexpr auto tim_ctl = _tim_ctl<tim_info::no>();
+        uint16_t compare = tik.counter;
+        static_assert(abs_channel<5 && abs_channel>0, "impossible channel index");
+        switch(abs_channel)
+        {
+          case 1: tim_ctl->CCR1 = compare; break;
+          case 2: tim_ctl->CCR2 = compare; break;
+          case 3: tim_ctl->CCR3 = compare; break;
+          case 4: tim_ctl->CCR4 = compare; break;
+        }
+      }
     };
     
     template<typename Leg>
@@ -171,7 +185,25 @@ namespace timer
       tim_ctl->PSC = split_ticks<0>(ticks)-1;
       tim_ctl->ARR = (uint16_t)ticks;
     }
-        
+     
+    static uint16_t get_counter()
+    {
+      constexpr auto tim_ctl = _tim_ctl<tim_info::no>();
+      return tim_ctl->CNT;
+    }
+    
+    static uint16_t get_max_counter()
+    {
+      constexpr auto tim_ctl = _tim_ctl<tim_info::no>();
+      return tim_ctl->ARR;
+    }
+
+    static void set_max_counter(uint32_t counter)
+    {
+      constexpr auto tim_ctl = _tim_ctl<tim_info::no>();
+      tim_ctl->ARR = uint16_t(counter);
+    }
+    
     template<typename... Opts>
     __declspec(noinline) void setup(Opts... opts) const
     {
@@ -378,4 +410,5 @@ namespace timer
     // but it's ok, because PWM will be on duty immediately on timer start.
     static void rise(event_source<REASON_OVERFLOW>){}  
   };
+  
 }

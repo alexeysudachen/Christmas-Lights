@@ -4,7 +4,22 @@
 #include "metacpp.hxx"
 
 namespace event {
+
+  template<typename T> inline bool check_and_clear(void(T))
+  {
+    return T::check_and_clear();
+  }
   
+  template<typename T> inline bool occured(void(T))
+  {
+    return T::occured();
+  }
+
+  template<typename T> inline void clear(void(T))
+  {
+    return T::clear();
+  }
+
   template<typename...> struct wtf;
   template<typename... Sources> const wtf<Sources...> wait_for_next(Sources... sources);
   template<typename... Sources> const wtf<Sources...> wait_for(Sources... sources);
